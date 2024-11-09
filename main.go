@@ -1,36 +1,45 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"path/filepath"
+	"time"
 
-	"github.com/dionvu/temp/event"
+	"github.com/dionvu/temp/db"
+	"github.com/joho/godotenv"
+	sb "github.com/nedpals/supabase-go"
 )
 
-const (
-	EVENT_DIR        = "/dev/input"
-	MOUSE_EVENT_FILE = "event19"
+var (
+	dbUrl  string
+	apiKey string
 )
 
 func main() {
-	mouseEventFile, err := os.Open(filepath.Join(EVENT_DIR, MOUSE_EVENT_FILE))
+	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer mouseEventFile.Close()
 
-	b := make([]byte, event.SIZE)
+	dbUrl = os.Getenv("DB_URL")
+	apiKey = os.Getenv("API_KEY")
 
-	for {
-		mouseEventFile.Read(b)
+	client := sb.CreateClient(dbUrl, apiKey)
 
-		event, err := event.From(b)
-		if err != nil {
-			log.Fatal(err)
-		}
+	// activity, err := session.NewActivity()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
-		fmt.Println(event.IsRightClick())
+	// _, err = db.AddHourSession(client, activity)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	s, err := db.GetCurrentSession(client)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	db.IncrementActivityTime(client, s.Id, s.Activity, time.Minute)
 }
