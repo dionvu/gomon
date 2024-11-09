@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/dionvu/temp/db"
+	"github.com/dionvu/temp/hypr"
+	"github.com/dionvu/temp/session"
 	"github.com/joho/godotenv"
 	sb "github.com/nedpals/supabase-go"
 )
@@ -26,20 +29,73 @@ func main() {
 
 	client := sb.CreateClient(dbUrl, apiKey)
 
-	// activity, err := session.NewActivity()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	if curSession, err := db.GetCurrentSession(client); err == nil {
+		for {
+			curSession, err = db.GetCurrentSession(client)
+			if err != nil {
+				log.Fatal(err)
+			}
 
-	// _, err = db.AddHourSession(client, activity)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+			time.Sleep(time.Minute)
 
-	s, err := db.GetCurrentSession(client)
+			windows, err := hypr.Windows()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			_, err = db.IncrementActivityTime(client, curSession.Id, curSession.Activity, windows, time.Minute)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			newActivity := session.FilterNewActivity(curSession.Activity, windows)
+			if len(newActivity) > 0 {
+				db.UpdateNewActivity(client, curSession, newActivity)
+			}
+
+			fmt.Println(newActivity)
+		}
+	}
+
+	windows, err := hypr.Windows()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	db.IncrementActivityTime(client, s.Id, s.Activity, time.Minute)
+	activity := session.NewActivity(windows)
+
+	_, err = db.AddHourSession(client, activity)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	curSession, err := db.GetCurrentSession(client)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for {
+		curSession, err = db.GetCurrentSession(client)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		time.Sleep(time.Minute)
+
+		windows, err := hypr.Windows()
+		if err != nil {
+			log.Fatal(err)
+		}
+		_, err = db.IncrementActivityTime(client, curSession.Id, curSession.Activity, windows, time.Minute)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		newActivity := session.FilterNewActivity(curSession.Activity, windows)
+		if len(newActivity) > 0 {
+			db.UpdateNewActivity(client, curSession, newActivity)
+		}
+
+		fmt.Println(newActivity)
+	}
 }

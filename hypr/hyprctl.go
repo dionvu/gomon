@@ -12,11 +12,11 @@ func Windows() ([]Window, error) {
 		return nil, err
 	}
 
-	return parseClient(b), nil
+	return parseHyprCtl(b), nil
 }
 
 // Parses output from hyprctl clients.
-func parseClient(b []byte) []Window {
+func parseHyprCtl(b []byte) []Window {
 	windows := []Window{}
 
 	chunks := splitChunks(string(b), 22)
@@ -28,6 +28,14 @@ func parseClient(b []byte) []Window {
 
 		for _, line := range strings.Split(chunk, "\n") {
 			switch prefix(line) {
+			case "Window":
+				words := strings.Split(line, " ")
+				if len(words) < 2 {
+					break
+				}
+
+				window.Id = words[1]
+
 			case "class:":
 				words := strings.Split(line, " ")
 
