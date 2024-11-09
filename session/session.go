@@ -1,18 +1,21 @@
 package session
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/dionvu/temp/hypr"
-	"github.com/google/uuid"
 )
 
 type Session struct {
-	Id       string     `json:"id"`
-	Start    time.Time  `json:"start"`
-	End      time.Time  `json:"end"`
-	Activity []Activity `json:"activity"`
+	Id          string     `json:"id"`
+	Start       time.Time  `json:"start"`
+	End         time.Time  `json:"end"`
+	Activity    []Activity `json:"activity"`
+	LeftClicks  uint       `json:"left_clicks"`
+	RightClicks uint       `json:"right_clicks"`
+	// MiddleClicks uint       `json:"middle_clicks"`
+	// MouseDistanceMeters uint       `json:"distance_meters"`
+	// KeyPresses uint `json:"key_presses"`
 }
 
 type Activity struct {
@@ -53,11 +56,4 @@ func FilterNewActivity(activity []Activity, windows []hypr.Window) []Activity {
 	}
 
 	return newActivity
-}
-
-// Checks if session has a valid uuid.
-func (s Session) IsValid() bool {
-	fmt.Print(s.Id)
-	_, err := uuid.Parse(s.Id)
-	return err == nil
 }

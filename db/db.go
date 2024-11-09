@@ -2,11 +2,14 @@ package db
 
 import (
 	"errors"
+	"log"
+	"os"
 	"time"
 
 	"github.com/dionvu/temp/hypr"
 	"github.com/dionvu/temp/session"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	sb "github.com/nedpals/supabase-go"
 )
 
@@ -20,7 +23,7 @@ const (
 // by the current time rounded down and up an hour, respectively.
 func AddHourSession(client *sb.Client, activity []session.Activity) (interface{}, error) {
 	hour := session.Session{
-		Id:       uuid.New().String(),
+		Id:       uuid.NewString(),
 		Start:    time.Now().Truncate(time.Hour),
 		End:      time.Now().Truncate(time.Hour).Add(time.Hour),
 		Activity: activity,
@@ -59,7 +62,7 @@ func GetCurrentSession(client *sb.Client) (session.Session, error) {
 
 // Given the current session's id, increments the time spent for each activity only
 // if the same activity is found in windows (the user's current windows).
-func IncrementActivityTime(client *sb.Client, id string, activity []session.Activity, windows []hypr.Window, add time.Duration) (interface{}, error) {
+func IncrementActivityTime(client *sb.Client, currSession session.Session, activity []session.Activity, windows []hypr.Window, add time.Duration) (interface{}, error) {
 	var res interface{}
 	exists := map[hypr.Window]bool{}
 
@@ -77,7 +80,7 @@ func IncrementActivityTime(client *sb.Client, id string, activity []session.Acti
 		COLUMN_ACTIVITY: activity,
 	}
 
-	err := client.DB.From(TABLE_SESSIONS).Update(updatedData).Eq("id", id).Execute(res)
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedData).Eq("id", currSession.Id).Execute(res)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +105,33 @@ func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivi
 	}
 
 	return nil
+}
+
+func IncrementClickCount(client *sb.Client, curSession session.Session, left uint, right uint) error {
+	var res interface{}
+
+	updatedStats := map[string]interface{}{
+		"left_clicks":  curSession.LeftClicks + left,
+		"right_clicks": curSession.RightClicks + right,
+	}
+
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COLUMN_ID, curSession.Id).Execute(&res)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Loads database secrets, returning the
+// db url and the api key, else panics!
+func LoadSecret() (string, string) {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return os.Getenv("DB_URL"), os.Getenv("API_KEY")
 }
 
 func formatTime(t time.Time) string {

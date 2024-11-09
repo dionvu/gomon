@@ -4,61 +4,30 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/dionvu/temp/db"
+	"github.com/dionvu/temp/event"
 	"github.com/dionvu/temp/hypr"
 	"github.com/dionvu/temp/session"
-	"github.com/joho/godotenv"
 	sb "github.com/nedpals/supabase-go"
 )
 
-var (
-	dbUrl  string
-	apiKey string
+const (
+	INCREMENT_INTERVAL = time.Second * 10
+	MOUSE_FILE         = "/dev/input/event19"
 )
 
-func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal(err)
-	}
+var (
+	LeftClicks  uint = 0
+	RightCLicks uint = 0
+)
 
-	dbUrl = os.Getenv("DB_URL")
-	apiKey = os.Getenv("API_KEY")
-
-	client := sb.CreateClient(dbUrl, apiKey)
-
-	if curSession, err := db.GetCurrentSession(client); err == nil {
-		for {
-			curSession, err = db.GetCurrentSession(client)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			time.Sleep(time.Second * 10)
-
-			windows, err := hypr.CurrentWindows()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			_, err = db.IncrementActivityTime(client, curSession.Id, curSession.Activity, windows, time.Minute)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			newActivity := session.FilterNewActivity(curSession.Activity, windows)
-			if len(newActivity) > 0 {
-				db.UpdateNewActivity(client, curSession, newActivity)
-			}
-
-			fmt.Println(newActivity)
-		}
-	}
-
+func AddNewSession(client *sb.Client) {
 	windows, err := hypr.CurrentWindows()
 	if err != nil {
+		debug.PrintStack()
 		log.Fatal(err)
 	}
 
@@ -68,34 +37,82 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
-	curSession, err := db.GetCurrentSession(client)
+func HandleNewActivity(client *sb.Client, curSession session.Session, windows []hypr.Window) {
+	newActivity := session.FilterNewActivity(curSession.Activity, windows)
+	if len(newActivity) > 0 {
+		err := db.UpdateNewActivity(client, curSession, newActivity)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func TrackMouseInput() {
+	f, err := os.Open(MOUSE_FILE)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer f.Close()
+
+	b := make([]byte, event.SIZE)
 
 	for {
-		curSession, err = db.GetCurrentSession(client)
+		var ev event.InputEvent
+
+		f.Read(b)
+
+		ev, err = event.From(b)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		time.Sleep(time.Second * 10)
+		if ev.IsLeftClick() {
+			LeftClicks++
+			fmt.Println("left click")
+		}
+
+		if ev.IsRightClick() {
+			RightCLicks++
+			fmt.Println("right click")
+		}
+	}
+}
+
+func main() {
+	log.SetFlags(log.LstdFlags | log.Llongfile)
+
+	sbClient := sb.CreateClient(db.LoadSecret())
+
+	go TrackMouseInput()
+
+	for {
+		curSession, err := db.GetCurrentSession(sbClient)
+		if err != nil {
+			AddNewSession(sbClient)
+		}
+
+		time.Sleep(INCREMENT_INTERVAL)
 
 		windows, err := hypr.CurrentWindows()
 		if err != nil {
 			log.Fatal(err)
 		}
-		_, err = db.IncrementActivityTime(client, curSession.Id, curSession.Activity, windows, time.Minute)
+
+		_, err = db.IncrementActivityTime(sbClient, curSession, curSession.Activity, windows, INCREMENT_INTERVAL)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		newActivity := session.FilterNewActivity(curSession.Activity, windows)
-		if len(newActivity) > 0 {
-			db.UpdateNewActivity(client, curSession, newActivity)
+		HandleNewActivity(sbClient, curSession, windows)
+
+		err = db.IncrementClickCount(sbClient, curSession, LeftClicks, RightCLicks)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		fmt.Println(newActivity)
+		LeftClicks = 0
+		RightCLicks = 0
 	}
 }
