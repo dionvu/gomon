@@ -61,14 +61,14 @@ func GetCurrentSession(client *sb.Client) (session.Session, error) {
 // if the same activity is found in windows (the user's current windows).
 func IncrementActivityTime(client *sb.Client, id string, activity []session.Activity, windows []hypr.Window, add time.Duration) (interface{}, error) {
 	var res interface{}
-	m := map[string]bool{}
+	exists := map[hypr.Window]bool{}
 
 	for _, win := range windows {
-		m[win.Id] = true
+		exists[win] = true
 	}
 
 	for i, a := range activity {
-		if m[a.Window.Id] {
+		if exists[a.Window] {
 			activity[i].TimeSpentMin += add.Minutes()
 		}
 	}

@@ -25,10 +25,9 @@ type Activity struct {
 func NewActivity(windows []hypr.Window) []Activity {
 	activity := []Activity{}
 
-	for _, window := range windows {
+	for _, win := range windows {
 		activity = append(activity, Activity{
-			Window:       window,
-			TimeSpentMin: 0,
+			Window: win,
 		})
 	}
 
@@ -36,20 +35,21 @@ func NewActivity(windows []hypr.Window) []Activity {
 }
 
 func FilterNewActivity(activity []Activity, windows []hypr.Window) []Activity {
-	exists := make(map[string]bool, len(activity))
+	exists := make(map[hypr.Window]bool, len(activity))
 	newActivity := []Activity{}
 
-	for _, a := range activity {
-		exists[a.Window.Id] = true
+	for _, activ := range activity {
+		exists[activ.Window] = true
 	}
 
 	for _, win := range windows {
-		if !exists[win.Id] {
+		if !exists[win] {
 			newActivity = append(newActivity, Activity{
-				Window:       win,
-				TimeSpentMin: 0,
+				Window: win,
 			})
 		}
+
+		exists[win] = true
 	}
 
 	return newActivity

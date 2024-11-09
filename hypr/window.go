@@ -12,7 +12,6 @@ const (
 )
 
 type Window struct {
-	Id    string `json:"id"`
 	Class string `json:"class"`
 	Title string `json:"title"`
 }

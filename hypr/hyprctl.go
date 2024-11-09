@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func Windows() ([]Window, error) {
+func CurrentWindows() ([]Window, error) {
 	cmd := exec.Command("hyprctl", "clients")
 	b, err := cmd.Output()
 	if err != nil {
@@ -18,6 +18,7 @@ func Windows() ([]Window, error) {
 // Parses output from hyprctl clients.
 func parseHyprCtl(b []byte) []Window {
 	windows := []Window{}
+	exists := map[Window]bool{}
 
 	chunks := splitChunks(string(b), 22)
 
@@ -28,14 +29,6 @@ func parseHyprCtl(b []byte) []Window {
 
 		for _, line := range strings.Split(chunk, "\n") {
 			switch prefix(line) {
-			case "Window":
-				words := strings.Split(line, " ")
-				if len(words) < 2 {
-					break
-				}
-
-				window.Id = words[1]
-
 			case "class:":
 				words := strings.Split(line, " ")
 
@@ -53,12 +46,14 @@ func parseHyprCtl(b []byte) []Window {
 				}
 
 				window.Title = strings.Join(words[1:], " ")
-
 			}
 		}
 
-		if window.Class != "" {
+		validWindow := window.Class != "" && window.Title != ""
+
+		if validWindow && !exists[window] {
 			windows = append(windows, window)
+			exists[window] = true
 		}
 	}
 

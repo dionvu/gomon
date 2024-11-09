@@ -36,9 +36,9 @@ func main() {
 				log.Fatal(err)
 			}
 
-			time.Sleep(time.Minute)
+			time.Sleep(time.Second * 10)
 
-			windows, err := hypr.Windows()
+			windows, err := hypr.CurrentWindows()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -57,7 +57,7 @@ func main() {
 		}
 	}
 
-	windows, err := hypr.Windows()
+	windows, err := hypr.CurrentWindows()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,9 +80,9 @@ func main() {
 			log.Fatal(err)
 		}
 
-		time.Sleep(time.Minute)
+		time.Sleep(time.Second * 10)
 
-		windows, err := hypr.Windows()
+		windows, err := hypr.CurrentWindows()
 		if err != nil {
 			log.Fatal(err)
 		}
