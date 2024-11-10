@@ -19,16 +19,25 @@ type InputEvent struct {
 
 type EventType uint16
 
-type EventCode uint16
-
 const (
 	EV_KEY EventType = 0x01
 	EV_REL EventType = 0x02
 )
 
+type EventCode uint16
+
 const (
-	BTN_LEFT  EventCode = 0x110
-	BTN_RIGHT EventCode = 0x111
+	BTN_LEFT   EventCode = 0x110
+	BTN_RIGHT  EventCode = 0x111
+	BTN_MIDDLE EventCode = 0x112
+	REL_X      EventCode = 0x00
+	REL_Y      EventCode = 0x01
+)
+
+const (
+	KEY_HOLD int32 = 2
+	KEY_DOWN int32 = 1
+	KEY_LIFT int32 = 0
 )
 
 const SIZE = 24
@@ -52,13 +61,30 @@ func From(b []byte) (InputEvent, error) {
 func (event InputEvent) IsRightClick() bool {
 	return event.Type == EV_KEY &&
 		event.Code == BTN_RIGHT &&
-		event.Value == 1
+		event.Value == KEY_DOWN
 }
 
 func (event InputEvent) IsLeftClick() bool {
-	return event.Type == EV_KEY &&
-		event.Code == BTN_LEFT &&
-		event.Value == 1
+	return event.Type.Equals(EV_KEY) &&
+		event.Code.Equals(BTN_LEFT) &&
+		event.Value == KEY_DOWN
+}
+
+func (event InputEvent) IsMiddleClick() bool {
+	return event.Type.Equals(EV_KEY) &&
+		event.Code.Equals(BTN_MIDDLE) &&
+		event.Value == KEY_DOWN
+}
+
+func (event InputEvent) IsMouseMove() bool {
+	return event.Type.Equals(EV_REL) &&
+		event.Code.Equals(REL_X, REL_Y)
+}
+
+func (event InputEvent) IsKeyboardPress() bool {
+	validKey := 0 <= event.Code && event.Code <= 248
+
+	return event.Type.Equals(EV_KEY) && validKey && event.Value == KEY_LIFT
 }
 
 // Returns if code is equal to any

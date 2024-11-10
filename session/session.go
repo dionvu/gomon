@@ -7,15 +7,16 @@ import (
 )
 
 type Session struct {
-	Id          string     `json:"id"`
-	Start       time.Time  `json:"start"`
-	End         time.Time  `json:"end"`
-	Activity    []Activity `json:"activity"`
-	LeftClicks  uint       `json:"left_clicks"`
-	RightClicks uint       `json:"right_clicks"`
-	// MiddleClicks uint       `json:"middle_clicks"`
-	// MouseDistanceMeters uint       `json:"distance_meters"`
-	// KeyPresses uint `json:"key_presses"`
+	Id             string     `json:"id"`
+	Start          time.Time  `json:"start"`
+	End            time.Time  `json:"end"`
+	Activity       []Activity `json:"activity"`
+	LeftClicks     uint       `json:"left_clicks"`
+	RightClicks    uint       `json:"right_clicks"`
+	MiddleClicks   uint       `json:"middle_clicks"`
+	XMovementMeter float64    `json:"mouse_movement_meter_x"`
+	YMovementMeter float64    `json:"mouse_movement_meter_y"`
+	KeyPresses     uint       `json:"key_presses"`
 }
 
 type Activity struct {

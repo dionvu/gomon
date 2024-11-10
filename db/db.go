@@ -14,10 +14,18 @@ import (
 )
 
 const (
-	TABLE_SESSIONS  = "sessions"
-	COLUMN_ACTIVITY = "activity"
-	COLUMN_ID       = "id"
+	TABLE_SESSIONS    = "sessions"
+	COL_ACTIVITY      = "activity"
+	COL_ID            = "id"
+	COL_KEYPRESSES    = "key_presses"
+	COL_LEFT_CLICKS   = "left_clicks"
+	COL_RIGHT_CLICKS  = "right_clicks"
+	COL_MIDDLE_CLICKS = "middle_clicks"
+	COL_MOUSE_X       = "mouse_movement_meter_x"
+	COL_MOUSE_Y       = "mouse_movement_meter_y"
 )
+
+const HYPRCTL_UNIT_TO_METER = 0.0000244
 
 // Adds a session with given activity, the sessions start and end is marked
 // by the current time rounded down and up an hour, respectively.
@@ -63,6 +71,10 @@ func GetCurrentSession(client *sb.Client) (session.Session, error) {
 // Given the current session's id, increments the time spent for each activity only
 // if the same activity is found in windows (the user's current windows).
 func IncrementActivityTime(client *sb.Client, currSession session.Session, activity []session.Activity, windows []hypr.Window, add time.Duration) (interface{}, error) {
+	if currSession.Id == "" {
+		return nil, nil
+	}
+
 	var res interface{}
 	exists := map[hypr.Window]bool{}
 
@@ -77,7 +89,7 @@ func IncrementActivityTime(client *sb.Client, currSession session.Session, activ
 	}
 
 	updatedData := map[string]interface{}{
-		COLUMN_ACTIVITY: activity,
+		COL_ACTIVITY: activity,
 	}
 
 	err := client.DB.From(TABLE_SESSIONS).Update(updatedData).Eq("id", currSession.Id).Execute(res)
@@ -96,10 +108,10 @@ func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivi
 	}
 
 	updatedActivity := map[string]interface{}{
-		COLUMN_ACTIVITY: currSession.Activity,
+		COL_ACTIVITY: currSession.Activity,
 	}
 
-	err := client.DB.From(TABLE_SESSIONS).Update(updatedActivity).Eq(COLUMN_ID, currSession.Id).Execute(res)
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedActivity).Eq(COL_ID, currSession.Id).Execute(res)
 	if err != nil {
 		return err
 	}
@@ -107,15 +119,47 @@ func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivi
 	return nil
 }
 
-func IncrementClickCount(client *sb.Client, curSession session.Session, left uint, right uint) error {
+func IncrementClickCount(client *sb.Client, curSession session.Session, left uint, right uint, middle uint) error {
 	var res interface{}
 
 	updatedStats := map[string]interface{}{
-		"left_clicks":  curSession.LeftClicks + left,
-		"right_clicks": curSession.RightClicks + right,
+		COL_LEFT_CLICKS:   curSession.LeftClicks + left,
+		COL_RIGHT_CLICKS:  curSession.RightClicks + right,
+		COL_MIDDLE_CLICKS: curSession.MiddleClicks + middle,
 	}
 
-	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COLUMN_ID, curSession.Id).Execute(&res)
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, count uint) error {
+	var res interface{}
+
+	updatedStats := map[string]interface{}{
+		COL_KEYPRESSES: curSession.KeyPresses + count,
+	}
+
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IncrementMouseMovement(client *sb.Client, curSession session.Session, x uint, y uint) error {
+	var res interface{}
+
+	updatedStats := map[string]interface{}{
+		COL_MOUSE_X: curSession.XMovementMeter + float64(x)*HYPRCTL_UNIT_TO_METER,
+		COL_MOUSE_Y: curSession.YMovementMeter + float64(y)*HYPRCTL_UNIT_TO_METER,
+	}
+
+	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
 	if err != nil {
 		return err
 	}
