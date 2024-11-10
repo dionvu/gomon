@@ -3,7 +3,7 @@ package session
 import (
 	"time"
 
-	"github.com/dionvu/temp/hypr"
+	"github.com/dionvu/gomon/hypr"
 )
 
 type Session struct {
@@ -24,7 +24,7 @@ type Activity struct {
 	TimeSpentMin float64     `json:"time_spent_min"`
 }
 
-// Returns activity structs of all current windows,
+// Returns Activity structs of all current windows,
 // setting the time spent on them to 0 minutes.
 func NewActivity(windows []hypr.Window) []Activity {
 	activity := []Activity{}
@@ -38,6 +38,8 @@ func NewActivity(windows []hypr.Window) []Activity {
 	return activity
 }
 
+// Give the current windows, returns new Activity structs
+// that are not already in the passed activity arr.
 func FilterNewActivity(activity []Activity, windows []hypr.Window) []Activity {
 	exists := make(map[hypr.Window]bool, len(activity))
 	newActivity := []Activity{}

@@ -12,11 +12,12 @@ func CurrentWindows() ([]Window, error) {
 		return nil, err
 	}
 
-	return parseHyprCtl(b), nil
+	return parse(b), nil
 }
 
-// Parses output from hyprctl clients.
-func parseHyprCtl(b []byte) []Window {
+// Parses output from
+// cmd hyprctl clients.
+func parse(b []byte) []Window {
 	windows := []Window{}
 	exists := map[Window]bool{}
 

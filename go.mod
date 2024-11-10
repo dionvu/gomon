@@ -1,4 +1,4 @@
-module github.com/dionvu/temp
+module github.com/dionvu/gomon
 
 go 1.21.11
 

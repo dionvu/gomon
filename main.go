@@ -2,15 +2,14 @@ package main
 
 import (
 	"log"
-	"math"
 	"os"
 	"runtime/debug"
 	"time"
 
-	"github.com/dionvu/temp/db"
-	"github.com/dionvu/temp/event"
-	"github.com/dionvu/temp/hypr"
-	"github.com/dionvu/temp/session"
+	"github.com/dionvu/gomon/db"
+	"github.com/dionvu/gomon/hypr"
+	"github.com/dionvu/gomon/input"
+	"github.com/dionvu/gomon/session"
 	sb "github.com/nedpals/supabase-go"
 )
 
@@ -20,15 +19,13 @@ const (
 	KEYBOARD_FILE      = "/dev/input/event16"
 )
 
-const HYPRCTL_UNIT_TO_METER = 0.0000244
-
 var (
-	LeftClicks      uint = 0
-	RightCLicks     uint = 0
-	MiddleClicks    uint = 0
-	KeyboardPresses uint = 0
-	MovementX       uint = 0
-	MovementY       uint = 0
+	LeftClicks      uint    = 0
+	RightCLicks     uint    = 0
+	MiddleClicks    uint    = 0
+	KeyboardPresses uint    = 0
+	XMovementMeter  float64 = 0
+	YMovementMeter  float64 = 0
 )
 
 func AddNewSession(client *sb.Client) {
@@ -63,14 +60,14 @@ func TrackMouseInput() {
 	}
 	defer f.Close()
 
-	b := make([]byte, event.SIZE)
+	b := make([]byte, input.SIZE)
 
 	for {
-		var ev event.InputEvent
+		var ev input.Event
 
 		f.Read(b)
 
-		ev, err = event.From(b)
+		ev, err = input.From(b)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -86,13 +83,34 @@ func TrackMouseInput() {
 		if ev.IsMiddleClick() {
 			MiddleClicks++
 		}
+	}
+}
+
+func TrackMouseMovement() {
+	f, err := os.Open(MOUSE_FILE)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	b := make([]byte, input.SIZE)
+
+	for {
+		var ev input.Event
+
+		f.Read(b)
+
+		ev, err = input.From(b)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		if ev.IsMouseMove() {
 			switch ev.Code {
-			case event.REL_X:
-				MovementX += uint(math.Abs(float64(ev.Value)))
-			case event.REL_Y:
-				MovementY += uint(math.Abs(float64(ev.Value)))
+			case input.REL_X:
+				XMovementMeter += ev.Value.Abs().Meter()
+			case input.REL_Y:
+				YMovementMeter += ev.Value.Abs().Meter()
 			}
 		}
 	}
@@ -105,14 +123,14 @@ func TrackKeyboardInput() {
 	}
 	defer f.Close()
 
-	b := make([]byte, event.SIZE)
+	b := make([]byte, input.SIZE)
 
 	for {
-		var ev event.InputEvent
+		var ev input.Event
 
 		f.Read(b)
 
-		ev, err = event.From(b)
+		ev, err = input.From(b)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -128,8 +146,8 @@ func ResetCounters() {
 	RightCLicks = 0
 	MiddleClicks = 0
 	KeyboardPresses = 0
-	MovementX = 0
-	MovementY = 0
+	XMovementMeter = 0
+	YMovementMeter = 0
 }
 
 func main() {
@@ -137,50 +155,61 @@ func main() {
 
 	sbClient := sb.CreateClient(db.LoadSecret())
 
-	go TrackMouseInput()
-	go TrackKeyboardInput()
-
-	for {
-		var curSession session.Session
-
-		curSession, err := db.GetCurrentSession(sbClient)
-		if err != nil {
-			AddNewSession(sbClient)
-			curSession, err = db.GetCurrentSession(sbClient)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-
-		time.Sleep(INCREMENT_INTERVAL)
-
-		windows, err := hypr.CurrentWindows()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, err = db.IncrementActivityTime(sbClient, curSession, curSession.Activity, windows, INCREMENT_INTERVAL)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		HandleNewActivity(sbClient, curSession, windows)
-
-		err = db.IncrementClickCount(sbClient, curSession, LeftClicks, RightCLicks, MiddleClicks)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = db.IncrementKeyboardPressCount(sbClient, curSession, KeyboardPresses)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = db.IncrementMouseMovement(sbClient, curSession, MovementX, MovementY)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		ResetCounters()
+	ses, err := db.GetCurrentSession(sbClient)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	_, err = db.ArchieveSession(sbClient, ses)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// go TrackMouseInput()
+	// go TrackKeyboardInput()
+	// go TrackMouseMovement()
+	//
+	// for {
+	// 	var curSession session.Session
+	//
+	// 	curSession, err := db.GetCurrentSession(sbClient)
+	// 	if err != nil {
+	// 		AddNewSession(sbClient)
+	// 		curSession, err = db.GetCurrentSession(sbClient)
+	// 		if err != nil {
+	// 			log.Fatal(err)
+	// 		}
+	// 	}
+	//
+	// 	time.Sleep(INCREMENT_INTERVAL)
+	//
+	// 	windows, err := hypr.CurrentWindows()
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	//
+	// 	_, err = db.IncrementActivityTime(sbClient, curSession, curSession.Activity, windows, INCREMENT_INTERVAL)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	//
+	// 	HandleNewActivity(sbClient, curSession, windows)
+	//
+	// 	err = db.IncrementClickCount(sbClient, curSession, LeftClicks, RightCLicks, MiddleClicks)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	//
+	// 	err = db.IncrementKeyboardPressCount(sbClient, curSession, KeyboardPresses)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	//
+	// 	err = db.IncrementMouseMovement(sbClient, curSession, XMovementMeter, YMovementMeter)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	//
+	// 	ResetCounters()
+	// }
 }

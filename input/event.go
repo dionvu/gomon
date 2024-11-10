@@ -1,20 +1,18 @@
-package event
+package input
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math"
 )
 
-// https://www.kernel.org/doc/html/v4.17/input/event-codes.html
-// /nix/store/hnxrl4wbjkpfkfdq6p01qgxhlg8lhzya-linux-headers-static-6.5/include/linux/input-event-codes.h
-
-type InputEvent struct {
+type Event struct {
 	TimeSec  uint32
 	TimeUsec uint32
 	Type     EventType
 	Code     EventCode
-	Value    int32
+	Value    EventValue
 }
 
 type EventType uint16
@@ -34,16 +32,21 @@ const (
 	REL_Y      EventCode = 0x01
 )
 
+type EventValue int32
+
 const (
-	KEY_HOLD int32 = 2
-	KEY_DOWN int32 = 1
-	KEY_LIFT int32 = 0
+	KEY_HOLD EventValue = 2
+	KEY_DOWN EventValue = 1
+	KEY_LIFT EventValue = 0
 )
 
+// The size that an event takes up in bytes.
 const SIZE = 24
 
-func From(b []byte) (InputEvent, error) {
-	event := InputEvent{}
+// Parses an input event from bytes
+// revieved from /dev/input/eventX.
+func From(b []byte) (Event, error) {
+	event := Event{}
 
 	if len(b) < 20 {
 		return event, errors.New("Events are not shorter than 20 bytes")
@@ -56,35 +59,6 @@ func From(b []byte) (InputEvent, error) {
 	binary.Read(bytes.NewReader(b[20:]), binary.LittleEndian, &event.Value)
 
 	return event, nil
-}
-
-func (event InputEvent) IsRightClick() bool {
-	return event.Type == EV_KEY &&
-		event.Code == BTN_RIGHT &&
-		event.Value == KEY_DOWN
-}
-
-func (event InputEvent) IsLeftClick() bool {
-	return event.Type.Equals(EV_KEY) &&
-		event.Code.Equals(BTN_LEFT) &&
-		event.Value == KEY_DOWN
-}
-
-func (event InputEvent) IsMiddleClick() bool {
-	return event.Type.Equals(EV_KEY) &&
-		event.Code.Equals(BTN_MIDDLE) &&
-		event.Value == KEY_DOWN
-}
-
-func (event InputEvent) IsMouseMove() bool {
-	return event.Type.Equals(EV_REL) &&
-		event.Code.Equals(REL_X, REL_Y)
-}
-
-func (event InputEvent) IsKeyboardPress() bool {
-	validKey := 0 <= event.Code && event.Code <= 248
-
-	return event.Type.Equals(EV_KEY) && validKey && event.Value == KEY_LIFT
 }
 
 // Returns if code is equal to any
@@ -107,4 +81,42 @@ func (typ EventType) Equals(types ...EventType) bool {
 		}
 	}
 	return false
+}
+
+func (event Event) IsRightClick() bool {
+	return event.Type == EV_KEY &&
+		event.Code == BTN_RIGHT &&
+		event.Value == KEY_DOWN
+}
+
+func (event Event) IsLeftClick() bool {
+	return event.Type.Equals(EV_KEY) &&
+		event.Code.Equals(BTN_LEFT) &&
+		event.Value == KEY_DOWN
+}
+
+func (event Event) IsMiddleClick() bool {
+	return event.Type.Equals(EV_KEY) &&
+		event.Code.Equals(BTN_MIDDLE) &&
+		event.Value == KEY_DOWN
+}
+
+func (event Event) IsMouseMove() bool {
+	return event.Type.Equals(EV_REL) &&
+		event.Code.Equals(REL_X, REL_Y)
+}
+
+func (event Event) IsKeyboardPress() bool {
+	validKey := 0 <= event.Code && event.Code <= 248
+
+	return event.Type.Equals(EV_KEY) && validKey && event.Value == KEY_LIFT
+}
+
+func (value EventValue) Meter() float64 {
+	const conversion = 0.0000244
+	return float64(value) * conversion
+}
+
+func (value EventValue) Abs() EventValue {
+	return EventValue(math.Abs(float64(value)))
 }

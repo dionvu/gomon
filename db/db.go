@@ -6,8 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/dionvu/temp/hypr"
-	"github.com/dionvu/temp/session"
+	"github.com/dionvu/gomon/archive"
+	"github.com/dionvu/gomon/hypr"
+	"github.com/dionvu/gomon/session"
+	"github.com/dionvu/gomon/util"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	sb "github.com/nedpals/supabase-go"
@@ -15,6 +17,7 @@ import (
 
 const (
 	TABLE_SESSIONS    = "sessions"
+	TABLE_ARCHIVE     = "archives"
 	COL_ACTIVITY      = "activity"
 	COL_ID            = "id"
 	COL_KEYPRESSES    = "key_presses"
@@ -24,8 +27,6 @@ const (
 	COL_MOUSE_X       = "mouse_movement_meter_x"
 	COL_MOUSE_Y       = "mouse_movement_meter_y"
 )
-
-const HYPRCTL_UNIT_TO_METER = 0.0000244
 
 // Adds a session with given activity, the sessions start and end is marked
 // by the current time rounded down and up an hour, respectively.
@@ -52,11 +53,37 @@ func AddHourSession(client *sb.Client, activity []session.Activity) (interface{}
 	return res, nil
 }
 
+func ArchieveSession(client *sb.Client, ses session.Session) (interface{}, error) {
+	var res []interface{}
+
+	var arc archive.Archive
+
+	arc, err := GetCurrentArchive(client)
+	if err != nil {
+		arc = archive.NewArchive([]session.Session{ses})
+
+		err = client.DB.From(TABLE_ARCHIVE).Insert(arc).Execute(&res)
+		if err != nil {
+			return res, err
+		}
+	}
+
+	arc.Sessions = append(arc.Sessions, ses)
+
+	updatedData := map[string]interface{}{
+		"sessions": arc.Sessions,
+	}
+
+	err = client.DB.From(TABLE_ARCHIVE).Update(updatedData).Eq(COL_ID, arc.Id).Execute(&res)
+
+	return res, nil
+}
+
 // Gets the session that with intervals start
 // and end that match the current time.
 func GetCurrentSession(client *sb.Client) (session.Session, error) {
 	var res []session.Session
-	err := client.DB.From(TABLE_SESSIONS).Select("*").Eq("start", formatTime(time.Now().Truncate(time.Hour))).Execute(&res)
+	err := client.DB.From(TABLE_SESSIONS).Select("*").Eq("start", util.FormatTime(time.Now().Truncate(time.Hour))).Execute(&res)
 	if err != nil {
 		return session.Session{}, err
 	}
@@ -68,9 +95,26 @@ func GetCurrentSession(client *sb.Client) (session.Session, error) {
 	return res[0], nil
 }
 
+func GetCurrentArchive(client *sb.Client) (archive.Archive, error) {
+	var res []archive.Archive
+
+	err := client.DB.From(TABLE_ARCHIVE).Select("*").Eq("date", time.Now().Format(time.DateOnly)).Execute(&res)
+	if err != nil {
+		return archive.Archive{}, err
+	}
+
+	if len(res) == 0 {
+		return archive.Archive{}, errors.New("No current archive in database")
+	}
+
+	return res[0], nil
+}
+
 // Given the current session's id, increments the time spent for each activity only
 // if the same activity is found in windows (the user's current windows).
-func IncrementActivityTime(client *sb.Client, currSession session.Session, activity []session.Activity, windows []hypr.Window, add time.Duration) (interface{}, error) {
+func IncrementActivityTime(client *sb.Client, currSession session.Session, activity []session.Activity,
+	windows []hypr.Window, add time.Duration,
+) (interface{}, error) {
 	if currSession.Id == "" {
 		return nil, nil
 	}
@@ -151,12 +195,12 @@ func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, 
 	return nil
 }
 
-func IncrementMouseMovement(client *sb.Client, curSession session.Session, x uint, y uint) error {
+func IncrementMouseMovement(client *sb.Client, curSession session.Session, xMeter float64, yMeter float64) error {
 	var res interface{}
 
 	updatedStats := map[string]interface{}{
-		COL_MOUSE_X: curSession.XMovementMeter + float64(x)*HYPRCTL_UNIT_TO_METER,
-		COL_MOUSE_Y: curSession.YMovementMeter + float64(y)*HYPRCTL_UNIT_TO_METER,
+		COL_MOUSE_X: curSession.XMovementMeter + xMeter,
+		COL_MOUSE_Y: curSession.YMovementMeter + yMeter,
 	}
 
 	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
@@ -176,8 +220,4 @@ func LoadSecret() (string, string) {
 	}
 
 	return os.Getenv("DB_URL"), os.Getenv("API_KEY")
-}
-
-func formatTime(t time.Time) string {
-	return t.Format(time.RFC3339)
 }
