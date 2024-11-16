@@ -22,3 +22,13 @@ func NewArchive(sessions []session.Session) Archive {
 		Sessions: sessions,
 	}
 }
+
+func (arc *Archive) Contains(ses session.Session) bool {
+	for _, s := range arc.Sessions {
+		if s.Id == ses.Id {
+			return true
+		}
+	}
+
+	return false
+}

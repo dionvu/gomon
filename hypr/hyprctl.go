@@ -15,6 +15,11 @@ func CurrentWindows() ([]Window, error) {
 	return parse(b), nil
 }
 
+const (
+	PREFIX_CLASS = "class:"
+	PREFIX_TITLE = "title:"
+)
+
 // Parses output from
 // cmd hyprctl clients.
 func parse(b []byte) []Window {
@@ -30,7 +35,7 @@ func parse(b []byte) []Window {
 
 		for _, line := range strings.Split(chunk, "\n") {
 			switch prefix(line) {
-			case "class:":
+			case PREFIX_CLASS:
 				words := strings.Split(line, " ")
 
 				if len(words) < 2 {
@@ -39,7 +44,7 @@ func parse(b []byte) []Window {
 
 				window.Class = strings.Join(words[1:], " ")
 
-			case "title:":
+			case PREFIX_TITLE:
 				words := strings.Split(line, " ")
 
 				if len(words) < 2 {

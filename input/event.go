@@ -120,3 +120,11 @@ func (value EventValue) Meter() float64 {
 func (value EventValue) Abs() EventValue {
 	return EventValue(math.Abs(float64(value)))
 }
+
+func (code EventCode) IsRelX() bool {
+	return code == REL_X
+}
+
+func (code EventCode) IsRelY() bool {
+	return code == REL_Y
+}

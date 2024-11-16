@@ -4,12 +4,12 @@ import (
 	"errors"
 	"log"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/dionvu/gomon/archive"
 	"github.com/dionvu/gomon/hypr"
 	"github.com/dionvu/gomon/session"
-	"github.com/dionvu/gomon/util"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	sb "github.com/nedpals/supabase-go"
@@ -24,17 +24,25 @@ const (
 	COL_LEFT_CLICKS   = "left_clicks"
 	COL_RIGHT_CLICKS  = "right_clicks"
 	COL_MIDDLE_CLICKS = "middle_clicks"
-	COL_MOUSE_X       = "mouse_movement_meter_x"
-	COL_MOUSE_Y       = "mouse_movement_meter_y"
+	COL_MOUSE_X       = "x_mouse_movement"
+	COL_MOUSE_Y       = "y_mouse_movement"
+	COL_SESSIONS      = "sessions"
+	COL_START         = "start"
+	COL_END           = "end"
+)
+
+const (
+	SESSION_INTERVALS  = time.Minute * 30
+	INCREMENT_INTERVAL = time.Minute
 )
 
 // Adds a session with given activity, the sessions start and end is marked
 // by the current time rounded down and up an hour, respectively.
-func AddHourSession(client *sb.Client, activity []session.Activity) (interface{}, error) {
-	hour := session.Session{
+func AddSession(client *sb.Client, activity []session.Activity) (interface{}, error) {
+	ses := session.Session{
 		Id:       uuid.NewString(),
-		Start:    time.Now().Truncate(time.Hour),
-		End:      time.Now().Truncate(time.Hour).Add(time.Hour),
+		Start:    time.Now().Truncate(SESSION_INTERVALS),
+		End:      time.Now().Truncate(SESSION_INTERVALS).Add(SESSION_INTERVALS),
 		Activity: activity,
 	}
 
@@ -45,36 +53,10 @@ func AddHourSession(client *sb.Client, activity []session.Activity) (interface{}
 		return nil, errors.New("There is an existing session in the database")
 	}
 
-	err = client.DB.From(TABLE_SESSIONS).Insert(hour).Execute(&res)
+	err = client.DB.From(TABLE_SESSIONS).Insert(ses).Execute(&res)
 	if err != nil {
 		return res, err
 	}
-
-	return res, nil
-}
-
-func ArchieveSession(client *sb.Client, ses session.Session) (interface{}, error) {
-	var res []interface{}
-
-	var arc archive.Archive
-
-	arc, err := GetCurrentArchive(client)
-	if err != nil {
-		arc = archive.NewArchive([]session.Session{ses})
-
-		err = client.DB.From(TABLE_ARCHIVE).Insert(arc).Execute(&res)
-		if err != nil {
-			return res, err
-		}
-	}
-
-	arc.Sessions = append(arc.Sessions, ses)
-
-	updatedData := map[string]interface{}{
-		"sessions": arc.Sessions,
-	}
-
-	err = client.DB.From(TABLE_ARCHIVE).Update(updatedData).Eq(COL_ID, arc.Id).Execute(&res)
 
 	return res, nil
 }
@@ -83,7 +65,7 @@ func ArchieveSession(client *sb.Client, ses session.Session) (interface{}, error
 // and end that match the current time.
 func GetCurrentSession(client *sb.Client) (session.Session, error) {
 	var res []session.Session
-	err := client.DB.From(TABLE_SESSIONS).Select("*").Eq("start", util.FormatTime(time.Now().Truncate(time.Hour))).Execute(&res)
+	err := client.DB.From(TABLE_SESSIONS).Select("*").Eq("start", FormatTime(time.Now().Truncate(SESSION_INTERVALS))).Execute(&res)
 	if err != nil {
 		return session.Session{}, err
 	}
@@ -93,6 +75,104 @@ func GetCurrentSession(client *sb.Client) (session.Session, error) {
 	}
 
 	return res[0], nil
+}
+
+func GetAllSessionsToday(client *sb.Client) ([]session.Session, error) {
+	var res []session.Session
+
+	startOfDay := FormatTime(time.Now().Truncate(24 * time.Hour))
+	endOfDay := FormatTime(time.Now().Truncate(24 * time.Hour).Add(24 * time.Hour))
+
+	err := client.DB.From(TABLE_SESSIONS).Select("*").Gte(COL_START, startOfDay).Lt(COL_END, endOfDay).Execute(&res)
+	if err != nil {
+		return res, err
+	}
+
+	slices.SortFunc(res, func(a, b session.Session) int {
+		return a.Start.Hour() - b.Start.Hour()
+	})
+
+	return res, nil
+}
+
+func DropSessions(client *sb.Client, before time.Time) (interface{}, error) {
+	var res interface{}
+
+	err := client.DB.From(TABLE_SESSIONS).Delete().Lt(COL_END, FormatTime(before)).Execute(&res)
+	if err != nil {
+		return res, err
+	}
+
+	return res, nil
+}
+
+func ArchivePastSessions(client *sb.Client) (interface{}, error) {
+	var res []interface{}
+	exists := map[string]bool{}
+
+	arc, err := GetCurrentArchive(client)
+	if err != nil {
+		AddNewArchive(client)
+		arc, err = GetCurrentArchive(client)
+		if err != nil {
+			return res, err
+		}
+	}
+
+	for _, ses := range arc.Sessions {
+		exists[ses.Id] = true
+	}
+
+	sessions, err := GetAllSessionsToday(client)
+	if err != nil {
+		return res, err
+	}
+
+	for _, ses := range sessions {
+		// fmt.Println(ses.End)
+
+		if ses.End.Before(time.Now()) && !exists[ses.Id] {
+			ArchiveSession(client, ses)
+		}
+	}
+
+	return res, nil
+}
+
+func ArchiveSession(client *sb.Client, ses session.Session) (interface{}, error) {
+	var res []interface{}
+
+	arc, err := GetCurrentArchive(client)
+	if err != nil {
+		AddNewArchive(client)
+		arc, err = GetCurrentArchive(client)
+		if err != nil {
+			return res, err
+		}
+	}
+
+	arc.Sessions = append(arc.Sessions, ses)
+
+	updatedData := map[string]interface{}{
+		COL_SESSIONS: arc.Sessions,
+	}
+
+	err = client.DB.From(TABLE_ARCHIVE).Update(updatedData).Eq(COL_ID, arc.Id).Execute(&res)
+
+	return res, nil
+}
+
+func AddNewArchive(client *sb.Client) (interface{}, error) {
+	var res interface{}
+
+	arc := archive.NewArchive([]session.Session{})
+
+	err := client.DB.From(TABLE_ARCHIVE).Insert(arc).Execute(&res)
+	if err != nil {
+		return res, err
+	}
+
+	return res, nil
 }
 
 func GetCurrentArchive(client *sb.Client) (archive.Archive, error) {
@@ -144,6 +224,7 @@ func IncrementActivityTime(client *sb.Client, currSession session.Session, activ
 	return res, err
 }
 
+// Updates the passed current session with the passed new activity.
 func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivity []session.Activity) error {
 	var res interface{}
 
@@ -163,13 +244,13 @@ func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivi
 	return nil
 }
 
-func IncrementClickCount(client *sb.Client, curSession session.Session, left uint, right uint, middle uint) error {
+func IncrementClickCount(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
 	var res interface{}
 
 	updatedStats := map[string]interface{}{
-		COL_LEFT_CLICKS:   curSession.LeftClicks + left,
-		COL_RIGHT_CLICKS:  curSession.RightClicks + right,
-		COL_MIDDLE_CLICKS: curSession.MiddleClicks + middle,
+		COL_LEFT_CLICKS:   curSession.LeftClicks + tracker.LeftClicks,
+		COL_RIGHT_CLICKS:  curSession.RightClicks + tracker.RightCLicks,
+		COL_MIDDLE_CLICKS: curSession.MiddleClicks + tracker.MiddleClicks,
 	}
 
 	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
@@ -180,11 +261,11 @@ func IncrementClickCount(client *sb.Client, curSession session.Session, left uin
 	return nil
 }
 
-func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, count uint) error {
+func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
 	var res interface{}
 
 	updatedStats := map[string]interface{}{
-		COL_KEYPRESSES: curSession.KeyPresses + count,
+		COL_KEYPRESSES: curSession.KeyPresses + tracker.KeyboardPresses,
 	}
 
 	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
@@ -195,15 +276,34 @@ func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, 
 	return nil
 }
 
-func IncrementMouseMovement(client *sb.Client, curSession session.Session, xMeter float64, yMeter float64) error {
+func IncrementMouseMovement(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
 	var res interface{}
 
 	updatedStats := map[string]interface{}{
-		COL_MOUSE_X: curSession.XMovementMeter + xMeter,
-		COL_MOUSE_Y: curSession.YMovementMeter + yMeter,
+		COL_MOUSE_X: curSession.XMovement + tracker.XMovement,
+		COL_MOUSE_Y: curSession.YMovement + tracker.YMovement,
 	}
 
 	err := client.DB.From(TABLE_SESSIONS).Update(updatedStats).Eq(COL_ID, curSession.Id).Execute(&res)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func IncrementAll(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
+	err := IncrementClickCount(client, curSession, tracker)
+	if err != nil {
+		return err
+	}
+
+	err = IncrementKeyboardPressCount(client, curSession, tracker)
+	if err != nil {
+		return err
+	}
+
+	err = IncrementMouseMovement(client, curSession, tracker)
 	if err != nil {
 		return err
 	}
@@ -220,4 +320,9 @@ func LoadSecret() (string, string) {
 	}
 
 	return os.Getenv("DB_URL"), os.Getenv("API_KEY")
+}
+
+// "2006-01-02T15:04:05Z07:00"
+func FormatTime(t time.Time) string {
+	return t.Format(time.RFC3339)
 }
