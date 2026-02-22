@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"slices"
 )
 
 type Event struct {
@@ -64,23 +65,13 @@ func From(b []byte) (Event, error) {
 // Returns if code is equal to any
 // of the passed EventCodes.
 func (code EventCode) Equals(codes ...EventCode) bool {
-	for _, c := range codes {
-		if code == c {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(codes, code)
 }
 
 // Returns if typ is equal to any
 // of the passed inputTypes.
 func (typ EventType) Equals(types ...EventType) bool {
-	for _, t := range types {
-		if typ == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(types, typ)
 }
 
 func (event Event) IsRightClick() bool {
@@ -107,7 +98,7 @@ func (event Event) IsMouseMove() bool {
 }
 
 func (event Event) IsKeyboardPress() bool {
-	validKey := 0 <= event.Code && event.Code <= 248
+	validKey := event.Code <= 248
 
 	return event.Type.Equals(EV_KEY) && validKey && event.Value == KEY_LIFT
 }

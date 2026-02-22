@@ -12,8 +12,8 @@ import (
 
 const (
 	INCREMENT_INTERVAL = time.Second * 2
-	KEYBOARD_FILE      = "/dev/input/event16"
-	MOUSE_FILE         = "/dev/input/event19"
+	KEYBOARD_FILE      = "/dev/input/event6"
+	MOUSE_FILE         = "/dev/input/event14"
 )
 
 func main() {
