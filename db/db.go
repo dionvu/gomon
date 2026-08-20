@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dionvu/gomon/archive"
-	"github.com/dionvu/gomon/hypr"
 	"github.com/dionvu/gomon/session"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
@@ -18,7 +17,6 @@ import (
 const (
 	TABLE_SESSIONS    = "sessions"
 	TABLE_ARCHIVE     = "archives"
-	COL_ACTIVITY      = "activity"
 	COL_ID            = "id"
 	COL_KEYPRESSES    = "key_presses"
 	COL_LEFT_CLICKS   = "left_clicks"
@@ -38,15 +36,14 @@ const (
 
 // Adds a session with given activity, the sessions start and end is marked
 // by the current time rounded down and up an hour, respectively.
-func AddSession(client *sb.Client, activity []session.Activity) (interface{}, error) {
+func AddSession(client *sb.Client) (any, error) {
 	ses := session.Session{
-		Id:       uuid.NewString(),
-		Start:    time.Now().Truncate(SESSION_INTERVALS),
-		End:      time.Now().Truncate(SESSION_INTERVALS).Add(SESSION_INTERVALS),
-		Activity: activity,
+		Id:    uuid.NewString(),
+		Start: time.Now().Truncate(SESSION_INTERVALS),
+		End:   time.Now().Truncate(SESSION_INTERVALS).Add(SESSION_INTERVALS),
 	}
 
-	var res []interface{}
+	var res []any
 
 	_, err := GetCurrentSession(client)
 	if err == nil {
@@ -95,8 +92,8 @@ func GetAllSessionsToday(client *sb.Client) ([]session.Session, error) {
 	return res, nil
 }
 
-func DropSessions(client *sb.Client, before time.Time) (interface{}, error) {
-	var res interface{}
+func DropSessions(client *sb.Client, before time.Time) (any, error) {
+	var res any
 
 	err := client.DB.From(TABLE_SESSIONS).Delete().Lt(COL_END, FormatTime(before)).Execute(&res)
 	if err != nil {
@@ -106,8 +103,8 @@ func DropSessions(client *sb.Client, before time.Time) (interface{}, error) {
 	return res, nil
 }
 
-func ArchivePastSessions(client *sb.Client) (interface{}, error) {
-	var res []interface{}
+func ArchivePastSessions(client *sb.Client) (any, error) {
+	var res any
 	exists := map[string]bool{}
 
 	arc, err := GetCurrentArchive(client)
@@ -139,8 +136,8 @@ func ArchivePastSessions(client *sb.Client) (interface{}, error) {
 	return res, nil
 }
 
-func ArchiveSession(client *sb.Client, ses session.Session) (interface{}, error) {
-	var res []interface{}
+func ArchiveSession(client *sb.Client, ses session.Session) (any, error) {
+	var res []any
 
 	arc, err := GetCurrentArchive(client)
 	if err != nil {
@@ -153,7 +150,7 @@ func ArchiveSession(client *sb.Client, ses session.Session) (interface{}, error)
 
 	arc.Sessions = append(arc.Sessions, ses)
 
-	updatedData := map[string]interface{}{
+	updatedData := map[string]any{
 		COL_SESSIONS: arc.Sessions,
 	}
 
@@ -162,8 +159,8 @@ func ArchiveSession(client *sb.Client, ses session.Session) (interface{}, error)
 	return res, nil
 }
 
-func AddNewArchive(client *sb.Client) (interface{}, error) {
-	var res interface{}
+func AddNewArchive(client *sb.Client) (any, error) {
+	var res any
 
 	arc := archive.NewArchive([]session.Session{})
 
@@ -190,66 +187,12 @@ func GetCurrentArchive(client *sb.Client) (archive.Archive, error) {
 	return res[0], nil
 }
 
-// Given the current session's id, increments the time spent for each activity only
-// if the same activity is found in windows (the user's current windows).
-func IncrementActivityTime(client *sb.Client, currSession session.Session, activity []session.Activity,
-	windows []hypr.Window, add time.Duration,
-) (interface{}, error) {
-	if currSession.Id == "" {
-		return nil, nil
-	}
-
-	var res interface{}
-	exists := map[hypr.Window]bool{}
-
-	for _, win := range windows {
-		exists[win] = true
-	}
-
-	for i, a := range activity {
-		if exists[a.Window] {
-			activity[i].TimeSpentMin += add.Minutes()
-		}
-	}
-
-	updatedData := map[string]interface{}{
-		COL_ACTIVITY: activity,
-	}
-
-	err := client.DB.From(TABLE_SESSIONS).Update(updatedData).Eq("id", currSession.Id).Execute(res)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, err
-}
-
-// Updates the passed current session with the passed new activity.
-func UpdateNewActivity(client *sb.Client, currSession session.Session, newActivity []session.Activity) error {
-	var res interface{}
-
-	for _, activity := range newActivity {
-		currSession.Activity = append(currSession.Activity, activity)
-	}
-
-	updatedActivity := map[string]interface{}{
-		COL_ACTIVITY: currSession.Activity,
-	}
-
-	err := client.DB.From(TABLE_SESSIONS).Update(updatedActivity).Eq(COL_ID, currSession.Id).Execute(res)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func IncrementClickCount(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
-	var res interface{}
+	var res any
 
-	updatedStats := map[string]interface{}{
+	updatedStats := map[string]any{
 		COL_LEFT_CLICKS:   curSession.LeftClicks + tracker.LeftClicks,
-		COL_RIGHT_CLICKS:  curSession.RightClicks + tracker.RightCLicks,
+		COL_RIGHT_CLICKS:  curSession.RightClicks + tracker.RightClicks,
 		COL_MIDDLE_CLICKS: curSession.MiddleClicks + tracker.MiddleClicks,
 	}
 
@@ -262,9 +205,9 @@ func IncrementClickCount(client *sb.Client, curSession session.Session, tracker 
 }
 
 func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
-	var res interface{}
+	var res any
 
-	updatedStats := map[string]interface{}{
+	updatedStats := map[string]any{
 		COL_KEYPRESSES: curSession.KeyPresses + tracker.KeyboardPresses,
 	}
 
@@ -277,9 +220,9 @@ func IncrementKeyboardPressCount(client *sb.Client, curSession session.Session, 
 }
 
 func IncrementMouseMovement(client *sb.Client, curSession session.Session, tracker session.Tracker) error {
-	var res interface{}
+	var res any
 
-	updatedStats := map[string]interface{}{
+	updatedStats := map[string]any{
 		COL_MOUSE_X: curSession.XMovement + tracker.XMovement,
 		COL_MOUSE_Y: curSession.YMovement + tracker.YMovement,
 	}

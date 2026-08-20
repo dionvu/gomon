@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"github.com/dionvu/gomon/db"
-	"github.com/dionvu/gomon/hypr"
 	"github.com/dionvu/gomon/session"
 	sb "github.com/nedpals/supabase-go"
 )
 
 const (
 	INCREMENT_INTERVAL = time.Second * 2
-	KEYBOARD_FILE      = "/dev/input/event6"
-	MOUSE_FILE         = "/dev/input/event14"
+	KEYBOARD_FILE      = "/dev/input/event19"
+	TRACKPAD_FILE      = "/dev/input/event11"
+	MOUSE_FILE         = "/dev/input/event21"
 )
 
 func main() {
@@ -21,25 +21,17 @@ func main() {
 
 	sbClient := sb.CreateClient(db.LoadSecret())
 
-	tracker := session.NewTracker(KEYBOARD_FILE, MOUSE_FILE)
+	tracker := session.NewTracker(KEYBOARD_FILE, MOUSE_FILE, TRACKPAD_FILE)
 	defer tracker.Close()
 
 	tracker.ListenAll()
 
 	for {
 		var curSession session.Session
-		var curWindows []hypr.Window
 
 		curSession, err := db.GetCurrentSession(sbClient)
 		if err != nil {
-			curWindows, err = hypr.CurrentWindows()
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			activity := session.NewActivity(curWindows)
-
-			_, err = db.AddSession(sbClient, activity)
+			_, err = db.AddSession(sbClient)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -58,24 +50,6 @@ func main() {
 		}
 
 		db.DropSessions(sbClient, time.Now().Add(-24*time.Hour))
-
-		curWindows, err = hypr.CurrentWindows()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		_, err = db.IncrementActivityTime(sbClient, curSession, curSession.Activity, curWindows, INCREMENT_INTERVAL)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		newActivity := session.FilterNewActivity(curSession.Activity, curWindows)
-		if len(newActivity) > 0 {
-			err := db.UpdateNewActivity(sbClient, curSession, newActivity)
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
 
 		err = db.IncrementAll(sbClient, curSession, tracker)
 		if err != nil {

@@ -8,6 +8,12 @@ import (
 	"slices"
 )
 
+type (
+	EventType  uint16
+	EventCode  uint16
+	EventValue int32
+)
+
 type Event struct {
 	TimeSec  uint32
 	TimeUsec uint32
@@ -16,24 +22,27 @@ type Event struct {
 	Value    EventValue
 }
 
-type EventType uint16
-
 const (
 	EV_KEY EventType = 0x01
 	EV_REL EventType = 0x02
+	EV_ABS EventType = 0x03
 )
-
-type EventCode uint16
 
 const (
-	BTN_LEFT   EventCode = 0x110
-	BTN_RIGHT  EventCode = 0x111
-	BTN_MIDDLE EventCode = 0x112
-	REL_X      EventCode = 0x00
-	REL_Y      EventCode = 0x01
-)
+	BTN_LEFT           EventCode = 0x110
+	BTN_RIGHT          EventCode = 0x111
+	BTN_MIDDLE         EventCode = 0x112
+	BTN_TOOL_FINGER    EventCode = 0x145
+	BTN_TOOL_DOUBLETAP EventCode = 0x14d
+	BTN_TOUCH          EventCode = 0x14a
 
-type EventValue int32
+	REL_X EventCode = 0x00
+	REL_Y EventCode = 0x01
+
+	ABS_X              EventCode = 0x00
+	ABS_Y              EventCode = 0x01
+	ABS_MT_TRACKING_ID EventCode = 0x39
+)
 
 const (
 	KEY_HOLD EventValue = 2
@@ -62,16 +71,16 @@ func From(b []byte) (Event, error) {
 	return event, nil
 }
 
-// Returns if code is equal to any
-// of the passed EventCodes.
 func (code EventCode) Equals(codes ...EventCode) bool {
 	return slices.Contains(codes, code)
 }
 
-// Returns if typ is equal to any
-// of the passed inputTypes.
 func (typ EventType) Equals(types ...EventType) bool {
 	return slices.Contains(types, typ)
+}
+
+func (val EventValue) Equals(values ...EventValue) bool {
+	return slices.Contains(values, val)
 }
 
 func (event Event) IsRightClick() bool {
@@ -83,6 +92,18 @@ func (event Event) IsRightClick() bool {
 func (event Event) IsLeftClick() bool {
 	return event.Type.Equals(EV_KEY) &&
 		event.Code.Equals(BTN_LEFT) &&
+		event.Value == KEY_DOWN
+}
+
+func (event Event) IsTrackpadLeftClick() bool {
+	return event.Type == EV_KEY &&
+		event.Code == BTN_TOOL_FINGER &&
+		event.Value == KEY_DOWN
+}
+
+func (event Event) IsTrackpadRightClick() bool {
+	return event.Type == EV_KEY &&
+		event.Code == BTN_TOOL_DOUBLETAP &&
 		event.Value == KEY_DOWN
 }
 
@@ -101,6 +122,23 @@ func (event Event) IsKeyboardPress() bool {
 	validKey := event.Code <= 248
 
 	return event.Type.Equals(EV_KEY) && validKey && event.Value == KEY_LIFT
+}
+
+func (event Event) IsTrackpadMove() bool {
+	return event.Type.Equals(EV_ABS) &&
+		event.Code.Equals(ABS_X, ABS_Y)
+}
+
+func (event Event) IsTrackpadTouch() bool {
+	return event.Type.Equals(EV_KEY) &&
+		event.Code.Equals(BTN_TOUCH) &&
+		event.Value.Equals(KEY_DOWN)
+}
+
+func (event Event) IsTrackpadLift() bool {
+	return event.Type.Equals(EV_ABS) &&
+		event.Code.Equals(ABS_MT_TRACKING_ID) &&
+		event.Value.Equals(-1)
 }
 
 func (value EventValue) Meter() float64 {
